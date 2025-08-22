@@ -124,7 +124,7 @@ package ComplexPkg;
 endpackage : ComplexPkg
 ```
 
-# 1.7 配置 
+### 1.7 配置
 
 SystemVerilog提供了定义设计配置功能，该功能用于说明模块实例与特定SystemVerilog源代码之间的绑定关系。配置机制的实现依赖于库（library）系统。一个库是由模块（module）、接口（interface）、程序（program）、检查器（checker）、原语（primitive）、包（package）及其他配置（configure）构成的集合。通过独立的库映射文件（library map file）可精确指定各库中模块单元对应的源代码位置。在仿真器或其他需要解析SystemVerilog源代码的软件工具的启动时，此类库映射文件的命名规范通常作为调用选项。
 
