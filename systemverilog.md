@@ -23,10 +23,12 @@ SystemVerilog中的基本块是模块，包含在关键字**module**和**endmodu
 ```system verilog
 module mux2to1 (input wire a, b, sel, // combined port and type declaration
 output logic y);
-always_comb begin // procedural block
-if (sel) y = a; // procedural statement
-else y = b;
-end
+    always_comb begin // procedural block
+        if (sel) 
+            y = a; // procedural statement
+        else 
+        y = b;
+    end
 endmodule: mux2to1 
 ```
 
