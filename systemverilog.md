@@ -4,7 +4,7 @@
 
 ### 1.1 module
 
-SystemVerilog中的基本块是模块，包含在关键字module和endmodule之间。模块主要用于表示设计块，但也可以用作验证代码以及验证块和设计块之间的互连的容器。模块可以包含的一些构造包括以下内容：
+SystemVerilog中的基本块是模块，包含在关键字**module**和**endmodule**之间。模块主要用于表示设计块，但也可以用作验证代码以及验证块和设计块之间的互连的容器。模块可以包含的一些构造包括以下内容：
 
 - 端口：带有端口声明
 - 数据声明，如网络、变量、结构和联合
@@ -32,7 +32,7 @@ endmodule: mux2to1
 
 ### 1.2 program
 
-program块包含在关键字program和endprogram之间，用于对测试台环境进行建模。module构造适用于硬件描述。然而，对于testbench，重点不是硬件级别的细节，如布线、结构层次和互连，而是对验证设计的完整环境进行建模。
+program块包含在关键字**program**和**endprogram**之间，用于对测试台环境进行建模。module构造适用于硬件描述。然而，对于testbench，重点不是硬件级别的细节，如布线、结构层次和互连，而是对验证设计的完整环境进行建模。
 program块有以下三个作用：
 
 - 提供了一个执行testbench的入口点。
@@ -54,7 +54,7 @@ endprogram
 
 ### 1.3 interface
 
-interface由interface…endinterface关键字界定，封装了设计模块之间以及设计与验证模块间的通信接口协议，是一种经过命名的网络或变量集合体。
+interface由**interface…endinterface**关键字界定，封装了设计模块之间以及设计与验证模块间的通信接口协议，是一种经过命名的网络或变量集合体。
 
 interface可在设计中实例化，并能够与其他实例化的module、接口interface以及程序program的接口里的端口进行互连。以前的design中往往存在大量由重复命名构成的端口声明与连接列表，通过采用这种分组命名的interface机制，能够显著缩减设计描述的代码规模，同时提升系统的可维护性。
 
@@ -86,3 +86,45 @@ module top;
     cpuMod cpu(.b(sb_intf)); // 把interface连接到cpu模块
 endmodule
 ```
+
+### 1.4 checker
+
+验证器(checker)结构由关键字**checker...endchecker**定义，是一种封装了断言和建模代码的验证功能模块。该结构的主要用途包括：(1)作为验证库的基础功能单元；(2)构建形式化验证所需的抽象辅助模型组件。
+
+### 1.5 primitive
+
+源语模块用于表示底层逻辑门和开关元件。SystemVerilog提供了若干内置的原语类型。设计人员可通过用户自定义原语(User Defined Primitives，UDP)对内置原语进行扩展，其语法结构由关键字**primitive...endprimitive**界定。内置原语与用户自定义原语结构支持建立时序精确的数字电路模型，该类建模通常称为门级建模。
+
+### 1.6 子程序subroutine
+
+**子程序**提供了一种封装可执行代码的机制，可在多处调用。子程序分为两种形式：**任务task**和**函数function**。  
+**任务**以语句形式调用，可包含任意数量的输入（input）、输出（output）、双向（inout）及引用（ref）参数，但不返回值。任务执行时可阻塞仿真时间，即任务结束时可能处于比调用时刻更晚的仿真时间点。  
+**函数**可返回值，亦可定义为**无返回值函数（void function）**。有返回值函数可以在表达式中作为操作数使用，而无返回值函数则以语句形式调用。函数可包含输入、输出、双向及引用参数，但必须在不阻塞仿真时间；不过，函数可以派生出能阻塞时间的子进程。
+
+### 1.7 包package
+
+模块（modules）、接口（interfaces）、程序块（programs）和验证器（checkers）为其内部声明提供了局部命名空间。在这些结构中声明的标识符仅在其作用域内有效，不会影响或与其他构建块的声明产生冲突。
+包（packages）提供了可被其他模块、接口等构件共享的声明空间，其声明内容可通过导入机制引入其他构建块（包括其他包）。
+
+package关键字用于定义一个包，其语法以package开始、endpackage结束。
+
+```system verilog
+package ComplexPkg; 
+    typedef struct {  
+        shortreal i, r; 
+    } Complex;  
+    function Complex add(Complex a, b); 
+        add.r = a.r + b.r; 
+        add.i = a.i + b.i; 
+    endfunction  
+    function Complex mul(Complex a, b); 
+        mul.r = (a.r * b.r) - (a.i * b.i); 
+        mul.i = (a.r * b.i) + (a.i * b.r); 
+    endfunction 
+endpackage : ComplexPkg
+```
+
+# 1.7 配置 
+
+SystemVerilog提供了定义设计配置功能，该功能用于说明模块实例与特定SystemVerilog源代码之间的绑定关系。配置机制的实现依赖于库（library）系统。一个库是由模块（module）、接口（interface）、程序（program）、检查器（checker）、原语（primitive）、包（package）及其他配置（configure）构成的集合。通过独立的库映射文件（library map file）可精确指定各库中模块单元对应的源代码位置。在仿真器或其他需要解析SystemVerilog源代码的软件工具的启动时，此类库映射文件的命名规范通常作为调用选项。
+
