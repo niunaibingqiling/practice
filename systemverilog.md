@@ -97,4 +97,94 @@ endprogram
 数组比较和赋值的结果如下
 ![alt text](image-3.png)
 
-##### 1.2.2.3 使用数组下标和位下标
+##### 1.2.3 合并数组
+
+合并数组可以作为1个整体来访问，也可以作为数组。例如1个32bit的寄存器，可以看作4个8bit数据，也可以看作单个无符号数。
+
+它的存放方式是连续的bit合集，中间没有没用的空间，另外，合并数组赋值时，高比特放在高索引位置。
+
+```verilog
+// 合并数组声明方式
+        bit [3:0] [7:0] bytes[4];
+        bytes[0] = 32'habcd_abcd;
+        bytes[1] = 32'hdecb_dada;
+        bytes[2] = 32'haaaa_dada;
+        bytes[3] = 32'hbbbb_dada;
+        foreach(bytes[i]) begin
+            //$displayh(bytes[i],
+            //            bytes[i][3],
+            //            bytes[i][3][7]);
+            // 第二种使用,, 来传入默认参数
+            $displayh(bytes[i],,
+                        bytes[i][3],,
+                        bytes[i][3][7]);
+        end
+```
+
+执行结果如下
+![alt text](image-4.png)
+
+还可以使用合并数组，来实现合并数组的等待触发，使用方法如下
+
+```verilog
+    bit [3:0][7:0] array[3]
+
+    //
+    forever begin
+        // 当数组array[0]的值发生变化，再执行下一步操作
+        @array[0]
+        // 操作
+        ...
+        //
+    end
+```
+
+##### 1.2.4 动态数组
+
+为了避免定长数组所造成的空间浪费，system verilog提供了动态数组，在仿真进行时，为其分配空间或者调整空间。
+
+动态数组在使用前，必须调用new[]操作符来分配空间，也可以把数组传递给new[]操作符，实现数组值的复制。
+
+```verilog
+    // 动态数组声明
+    int darray1[],darray2[];
+    int sarray[5];
+
+    initial begin
+        // 创建长度为5的动态数组
+        darray1 = new[5];
+        foreach (darray1[i]) begin
+            std::randomize(darray1[i]);
+        end
+        $display("%p",darray1);
+        $display("%p\n",darray2);
+
+        // 动态数组赋值
+        darray2 = darray1;
+        $display("%p",darray1);
+        $display("%p\n",darray2);
+
+        // 动态数组删除
+        darray2.delete();
+        $display("%p",darray1);
+        $display("%p\n",darray2);
+
+        // 动态数组创建赋值
+        darray2 = new[20](darray1);
+        $display("%p",darray1);
+        $display("%p\n",darray2);
+
+        // 动态数组与定长数组赋值
+        sarray = darray1;
+        $display("%p",darray1);
+        $display("%p\n",sarray);
+    end
+
+    
+```
+
+运行结果
+![alt text](image-5.png)
+
+##### 1.2.5 队列
+
