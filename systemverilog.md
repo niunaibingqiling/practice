@@ -188,3 +188,103 @@ endprogram
 
 ##### 1.2.5 队列
 
+队列可以在任何一个位置增删元素，也可以使用索引访问。当增加的元素超过了原来的队列尺寸，system verilog会分配更多的空间。队列、动态数组、定宽数组之间还可以相互赋值，但是赋值时的数组大小应一致。
+
+```verilog
+    // 定义队列
+    int q1[$],q2[$] = {1,2,3,4,5};
+    initial begin
+        // 在0索引位置插入一个元素
+        q1.insert(0,2);
+        $display("%p",q1);
+        // 删除0这个位置的元素
+        q1.delete(0);
+        $display("%p",q1);
+
+
+        q2.push_front(1);
+        q2.pop_back();
+
+        q2.push_back(8);
+        q2.pop_front();
+
+        foreach(q2[i]) begin
+            $display(q2[i]);
+        end
+
+        // 使用索引范围，$代表最开始的索引或最后的索引
+        q2 = {q2[1:$],q2[$:3]};
+        $display(q2);
+
+        // 队列给数组赋值
+        sarray = q2;
+        $display(sarray);
+
+        // 删除队列
+        q2 = {};
+        q2.delete();
+        $display(q2);
+
+    end
+```
+
+运行结果如下
+
+![alt text](image-7.png)
+
+##### 1.2.6 关联数组
+
+system verilog提供了关联数组，来实现稀疏存储，建立高效的查找映射关系。
+
+关联数组的定义使用在中括号里放置数据类型的形式来声明，例如[int]、[packet]，也可以使用[*]不明确类型的方式来声明，不用使用new方法来创建空间。
+
+```verilog
+    initial begin
+        // 声明索引是string类型的关联数组
+        int switch[string],min_address,max_address;
+        string index;
+        switch["min_address"] = 10;
+
+        switch["max_address"] = 100;
+
+        $display(switch.exists("min_address"));
+
+        // foreach遍历关联数组
+        foreach(switch[i]) begin
+            $display(switch[i]);
+        end
+
+        // 在不知道索引有哪些时，可以通过first、next、last、prev方法来获取
+        switch.first(index);
+        $display(index);
+
+        switch.next(index);
+        $display(index);
+
+        switch.last(index);
+        $display(index);
+
+        switch.prev(index);
+        $display(index);
+
+    end
+
+
+```
+
+执行结果如下
+
+![alt text](image-8.png)
+
+##### 1.2.7 数组的常用方法
+
+这里的数组包括了定长数组、动态数组、队列和关联数组。
+
+###### 数组缩减方法
+
+支持数组中各个元素相互求和（sum）、积（product）、与（and）、或（or）和异或（xor）
+
+```verilog
+
+
+```
