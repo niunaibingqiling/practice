@@ -282,9 +282,138 @@ system verilog提供了关联数组，来实现稀疏存储，建立高效的查
 
 ###### 数组缩减方法
 
-支持数组中各个元素相互求和（sum）、积（product）、与（and）、或（or）和异或（xor）
+支持数组中各个元素相互求和（sum）、积（product）、与（and）、或（or）和异或（xor），with方法可以使用默认的重复参数item或者其余的重复参数，比如x，代表了数组中一个元素，使用前需要在方法的参数列表里声明一下。
+
+```verilog
+initial begin
+        bit [3:0] one_bit[10];
+        int  sum;
+        int  product;
+        
+        foreach (one_bit[i]) begin
+            one_bit[i] = i+1;
+        end
+        
+        $display(one_bit);
+        $display("one_bit.sum = %h",one_bit.sum());
+        $display("one_bit.product = %h",one_bit.product());
+        $display("one_bit.and = %h",one_bit.and());
+        $display("one_bit.or = %h",one_bit.or());
+        $display("one_bit.xor = %h",one_bit.xor());
+
+        sum = one_bit.sum();
+        $display("one_bit's sum = %h",sum);
+        product = one_bit.product();
+        $display("one_bit's product = %h",product);
+
+        // 使用with方法，item是默认的，x需要在方法的参数列表里提前声明
+        $display("one_bit.sum = %h",one_bit.sum(x) with (int '(x)));
+        $display("one_bit.product = %h",one_bit.product() with (int '(item)));
+end
+```
+
+执行结果如下
+
+![alt text](image-10.png)
+
+##### 1.2.8 数组定位方法
+
+查找数组的最大值，最小值可以使用max和min方法。去掉数组中重复的元素可以使用方法unique。find方法联合with表达式可以满足条件的元素。以上三个方法的返回值均是队列。
+
+```verilog
+initial begin
+    int sarray[6]   =   '{1,6,2,6,8,6};
+    int darray[]         =   '{2,4,6,8,10};
+    int queue[$]        =   {1,3,5,7,3};
+    
+    $display("sarray.max = %p",sarray.max());
+    $display("darray.min = %p",darray.min());
+    $display("queue.unique = %p",queue.unique());
+end
+```
+
+![alt text](image-11.png)
+
+从一系列数组元素中，查找符合条件的元素，往往使用find...with...语法，
+
+```verilog
+    int d[$]            =   {9,1,8,3,4,4};
+    int tq[$];
+    $display("d = ",d);
+    // 查找大于3的所有元素
+    tq                  =   d.find with (item > 3);
+    $display("d > 3 elem = %p",tq);
+    // 查找大于3的元素的第一个元素
+    tq                  =   d.find_first with (item > 3);
+    $display("d > 3 first elem = %p",tq);
+    // 查找大于3的元素的第一个索引
+    tq                  =   d.find_first_index with (item > 3);
+    $display("d > 3 first index = %p",tq);
+    // 查找大于3的元素的最后一个元素
+    tq                  =   d.find_last with (item > 3);
+    $display("d > 3 last elem = %p",tq);
+    // 查找大于3的元素的最后一个索引
+    tq                  =   d.find_last_index with (item > 3);
+    $display("d > 3 last index = %p",tq);
+```
+
+执行结果如下
+![alt text](image-12.png)
+
+除了以上的查找方法外，还可以用sum...with...来对满足条件的元素求和。这里的item < 7会引入未知的返回值，建议在统计元素个数的时候，明确条件的返回值。
 
 ```verilog
 
-
+        int count,total,d[] =   '{9,1,8,3,4};
+        // 统计元素值大于7的个数
+        count   =   d.sum with(item < 7 ? 1 : 0);
+        $display("d's elem > 7 count = %0d",count);
+        // 计算元素值大于7的元素和
+        total   =   d.sum with((item > 7)*item);
+        $display("d's elem > 7 sum = %0d",total);
+        total   =   d.sum with((item > 7) ? item : 0);
+        $display("d's elem > 7 sum = %0d",total);
 ```
+
+![alt text](image-14.png)
+
+##### 1.2.9 对数组排序
+对数组排序，分为正向排序sort（从小到大），逆向排序rsort，倒换位置reverse和打乱顺序shuffle
+
+```verilog
+    initial begin
+        int d[] =   '{9,1,8,3,4};
+        $display("d = %p",d);
+        d.reverse();
+        $display("d.reverse = %p",d);
+        d.sort();
+        $display("d.sort = %p",d);
+        d.rsort();
+        $display("d.rsort = %p",d);
+        d.shuffle();
+        $display("d.shuffle = %p",d);
+    end
+```
+
+执行结果如下
+![alt text](image-15.png)
+
+也可以对结构体，按照结构体中某一成员或者多个成员使用sort...with进行排序，在依据多个成员进行排序时，需要使用{}来包括排序所使用的元素。
+
+```verilog
+    struct packed {byte red,green,blue;} c[];
+    initial begin
+        c = new[3];
+        foreach(c[i])begin
+            c[i] = $urandom(); 
+        end
+        $display("c = %p",c);
+        // 按照red成员排序
+        c.sort with(item.red);
+        $display("c.sort = %p",c);
+        c.sort(x) with({x.green,x.blue});
+        $display("c.sort = %p",c);
+    end
+```
+
+![alt text](image-16.png)
