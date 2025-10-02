@@ -378,6 +378,7 @@ end
 ![alt text](image-14.png)
 
 ##### 1.2.9 对数组排序
+
 对数组排序，分为正向排序sort（从小到大），逆向排序rsort，倒换位置reverse和打乱顺序shuffle
 
 ```verilog
@@ -417,3 +418,215 @@ end
 ```
 
 ![alt text](image-16.png)
+
+### 1.3 typedef创建新的类型
+
+在verilog使用`define可以创建个一个新的宏，用来文本替换，parameter来定义参数。
+在system verilog中新增了typedef，用来定义新的数据类型。
+define、parameter、typedef既可以放在程序的外部，又可以放在begin...end块内部。
+
+```verilog
+    parameter OPSIZE    =   8;
+    parameter ASIZE     =   8;
+    typedef bit [OPSIZE-1:0]    char;
+    // 新定义的char类型 用来定义数组
+    typedef char array[ASIZE];             
+    initial begin
+        array a;
+        foreach(a[i])begin
+            std::randomize(a[i]);
+        end
+        $display(a);
+    end
+```
+
+#### 1.3.1 结构体struct
+
+struct是一个数据的集合，它是可综合的，并且可以通过模块端口进行传递。
+合并的结构会把数据连续的存放起来，中间没有空闲位置。
+
+```verilog
+    typedef struct {int a;
+            byte b;
+            shortint c;
+            } my_struct_s;
+    my_struct_s st = '{32'haaaa_bbbb,8'hcc,16'hdddd_eeee};
+    $display(st);
+    $display("str = %x %x %x",st.a,st.b,st.c);
+```
+
+![alt text](image-17.png)
+
+声明结构体为合并类型，可以看到打印整个结构体的结果变成了一个连续的值。
+
+```verilog
+    typedef struct packed {int a;
+            byte b;
+            shortint c;
+            } my_struct_s;
+    my_struct_s st = '{32'haaaa_bbbb,8'hcc,16'hdddd_eeee};
+    $display(st);
+    $display("str = %x %x %x",st.a,st.b,st.c);
+```
+
+![alt text](image-18.png)
+
+#### 1.3.2 联合
+
+同一个地址空间存储的内容，可以以不同的类型表示。vcs仿真器不支持unpacked类型的union。
+![alt text](image-19.png)
+
+| 特性 | 打包联合 | 非打包联合 |
+|------|----------|------------|
+| 内存布局 | 确定位宽 | 实现定义 |
+| 可综合 | 是 | 通常不可 |
+| 数据类型 | 必须相同位宽 | 任意类型 |
+| 内存共享 | 精确位对齐 | 可能填充 |
+
+```verilog
+program test;
+    typedef union packed {
+        int number;        // 整数形式
+        logic [31:0] bits; // 位形式
+    } converter_t;
+    initial begin
+        converter_t data;
+        // 当作整数使用
+        data.number = 123;      // 存入整数123
+        $display("%d", data.number); // 输出: 123
+        
+        // 同样的数据，当作位模式使用  
+        $display("%h", data.bits);   // 输出: 0000007B (123的十六进制)
+    end
+endprogram
+```
+
+![alt text](image-20.png)
+
+### 1.4 类型转换
+
+#### 1.4.1 静态类型转换
+
+静态类型转换不对转换值进行检查，在转换目标类型时，在要转换的表达式前加上单引号，完成类型转换，不做检查，可能会导致出现数组越级的情况。
+
+静态类型转换还带有一定的四舍五入，比如10.0-0.1的int类型转换结果为10。
+
+```verilog
+    int i;
+    real j;
+    initial begin
+        i = int '(10.0-0.1);
+        $display("%d\n", i);  
+        i = int '(10.0-0.6);
+        j = real '(i);
+        $display("%d\n", i);   
+        $display("%f\n", j);   
+    end
+```
+
+执行结果如下
+
+![alt text](image-23.png)
+
+#### 1.4.2流操作符
+
+流操作符是一种打包和解包的工具，用于在不同数据之间进行转换（包括数组和结构体）。基本格式如下，{}是不可少的，slice_size为切片大小，可以有bit、byte、shortint、int、longint这五种选项，对应1bit、8bit、16bit、32bit和64bit，>>代表从左到右流，<<代表从右向左的流。
+
+```systemverilog
+    { >> / << [slice_size] {data}}
+```
+
+\>>流操作符，代表正常处理数组，<<代表倒序处理。~~对于合并数组和非合并数组之间的转换，非合并数组的默认索引是[0:size-1]，会导致乱序，使用vcs仿真过程中没有出现倒序的现象。~~
+
+```verilog
+    initial begin
+        bit [63:0]  queue[$];
+        bit [3:0]   array[];
+        bit [15:0] [7:0] packed_array;
+        bit [7:0] array_reverse[16];
+        bit [7:0] array_reverse_1[0:15];
+
+        array = new[32];
+        foreach(array[i]) begin
+            std::randomize(array[i]);
+        end
+        $display(array);
+        // 从左往右
+        queue = {>> bit [3:0] {array}};
+        $display(queue);
+        // 从右往左
+        queue = {<< bit [3:0] {array}};
+        $display(queue);
+        
+        // 压缩数组要注意声明的维度
+        packed_array    = {>> bit [3:0] {array}};
+        $display("%h",packed_array);
+        
+        array_reverse    = {>> bit [3:0] {array}};
+        $display(array_reverse);
+
+        array_reverse_1    = {>> bit [3:0] {array_reverse}};
+        $display(array_reverse_1);
+    end
+
+```
+
+![alt text](image-24.png)
+
+### 1.5 枚举类型
+
+枚举类型的使用方法通常是，先定义枚举类型，再创建相应的变量。此外，还可以使用内部的name函数，获取变量值的字符串名字。
+
+```verilog
+    typedef enum {INIT=1,DECODE=10,IDLE} fsmstate_e;
+    fsmstate_e pstate,nstate;
+    initial begin
+        case(pstate)
+            IDLE:nstate = INIT;
+            INIT:nstate = DECODE;
+            default: nstate = IDLE;
+        endcase
+        $display("Next state is %s, it's value = %d",nstate.name(),nstate);
+        // 赋值无效值，导致赋值失败
+        $cast(pstate,0);
+        $display("Next state is %s, it's value = %d",pstate.name(),pstate);
+    end
+```
+
+![alt text](image-25.png)
+
+### 1.6 常量
+
+声明常量的方法很简单，在声明时，使用const修饰符修饰，并在声明时进行初始化，在代码中不能改变它的值，改变会报错。
+
+```verilog
+    initial begin
+        const byte colon = ":";
+        $display(colon);
+        // 修改const内容会报错
+        colon = "h";
+    end
+```
+
+### 1.7 字符串
+
+字符串使用string来定义，格式化通过$psprintf()来返回新的字符串类型。
+
+### 表达式的位宽
+
+有三种方式，可以指定表达式计算时的宽度，有三种方法。
+
+```verilog
+    initial begin
+        bit one = 1'b1;
+        bit [7:0] byte8;
+        $display("%d",one + one);
+        // 指定期望的宽度
+        byte8 = one + one;
+        $display("%d",byte8);
+        // 加入其他值来获取期望宽度
+        $display("%d",one+one+2'b0);
+        // 变量宽度强制转换
+        $display("%d",one+2'(one));
+    end
+```
