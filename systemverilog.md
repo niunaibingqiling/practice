@@ -630,3 +630,261 @@ endprogram
         $display("%d",one+2'(one));
     end
 ```
+
+## 2 过程语句和子程序
+
+### 2.1 任务、函数以及void函数
+
+在system verilog中，允许函数在fork...join_none语句生成的线程中调用task，其余情况均不允许函数调用task。
+此外，在verilog中，要求函数必须有返回值，并且返回值必须被使用，在system verilog中，提供了一个忽略它的返回值的方法。参数的默认类型和方向是logic input，但最好还是都带上类型和方向。
+
+```verilog
+    // 忽略函数返回值
+    void ' ($func(xxx,xxx,xxx));
+
+    // task定义
+    task T3(a,b,output bit [15:0] u,v);
+```
+
+### 2.2 高级的参数类型 ref
+
+system verilog中，参数的传递方式还有ref类型，它可以传递数组给子程序，以减小堆栈区的使用。
+
+ref参数只能用在带自动存储的task和function里。
+
+program和module本身是static，需要声明成automatic。program和module要想使用automatic，需要在定义的时候声明是automatic或者在task和function定义时，声明成automatic。
+
+任务和函数还支持返回return，十分适用在task发现错误，需要提前返回。
+
+如果任务task的定义时是ref类型的参数，在task里修改变量，修改的结果对其余function和task是实时可见的。
+
+```verilog
+    // ref类型 传入的参数
+    task bus_read(  input   logic   [31:0]  addr,
+                    ref     logic   [31:0]  data);
+        bus.request =   1'b1;
+        @(posedge bus.grant) 
+        bus.addr    =   addr;
+        @(posedge bus.enable);
+        data        =   bus.data;
+        bus.request =   1'b0;
+        @(negedge bus.grant);
+    endtask
+
+    logic   [31:0]  addr,data;
+    initial begin
+        fork
+            // 并行执行
+            bus_read(addr,data);
+            thread2:begin
+                // 等待data发生变化时
+                @data;
+                $display("Read %h form bus",data);
+            end
+        join
+    end
+```
+
+### 2.3 从函数中返回一个数组
+
+system verilog无法做到直接返回数组，可以通过typedef一个数组类型来返回数组。
+
+还可以通过
+
+```verilog
+    // 定义数组类型
+    typedef int fixed_array5[5];
+    fixed_array5 f5;
+
+    // 通过函数返回值方式，返回typedef定义的数组类型
+    function fixed_array5 init(int start);
+    //function int [5] init(int start);
+        foreach(init[i]) begin
+            init[i] =   i   +   start;
+        end
+    endfunction
+    initial begin
+        f5 = init(5);
+        foreach(f5[i]) begin
+            $display("f5[%0d]   =   %0d",i,f5[i]);
+        end
+    end
+
+    // 使用ref修改数组
+    function void init(ref int f[5],input int start);
+        foreach (f[i])
+            f[i]    =   i   +   start;
+    endfunction
+    
+    initial begin
+        init(f5,5);
+        foreach(f5[i]) begin
+            $display("f5[%0d]   =   %0d",i,f5[i]);
+        end
+    end
+```
+
+### 2.4 局部数据存储
+
+在verilog和systemverilog里的task和function里的传入和传出变量以及内部变量，默认是存储在静态存储区的，也就是说，变量是静态变量，多次调用使用的是同一个地址空间的变量。
+
+下面task在第二次调用会覆盖第一次调用传入的addr、expect_data以及输出的success。原因在于task里的变量使用的是同一个地址。将program声明为automatic就能解决这个问题。
+
+```verilog
+    program test;
+        task wait_for_mem(input [31:0] addr,expect_data,output access);
+            while(bus.addr != addr)
+                @(bus.addr);
+            success = (bus.data == expect_data);
+        endtask
+    endprogram
+```
+
+### 2.5 时间打印
+
+system verilog允许使用0.1ns和20ps这样单位的延时，还支持使用\$timeformat,\$time和\$raaltime。并且支持把时间值存到变量里，在计算和延时中使用它们。
+\$time和\$realtime分别返回整形和real型时间值。
+\$timeformat设置\%t打印格式。
+
+```verilog
+    initial begin
+        real rdelay = 80ns;
+        time tdelay = 90us;
+        $timeformat(-9,3,"ns",8);
+        # rdelay;
+        $display("%t",$realtime);
+        # tdelay;
+        $display("%t",$time);
+    end
+```
+
+## 3 连接设计与测试平台
+
+### 3.1 一般的interface用法
+
+使用接口连接dut和测试平台，首先定义接口interface，时钟clk可以是接口的一部分，也可以不是。
+
+此外，接口信号还必须是能非阻塞赋值来驱动。
+
+![alt text](image-26.png)
+
+interface定义如下
+
+```verilog
+interface arb_if(input bit clk);
+    logic [1:0] grant,request;
+    logic       rst;
+endinterface
+```
+
+使用interface连接dut和测试平台
+
+```verilog
+module top;
+    bit clk;
+    always #5 clk =~clk;
+    // 声明interface
+    arb_if  arbif(clk);
+    arb a1  (arbif);
+    test t1 (arbif);
+endmodule
+```
+
+### 3.2 使用modport对信号分组
+
+上面使用方法是无信号方向的连接，使用modport为信号定义方向。
+
+```verilog
+interface arb_if(input bit clk);
+    logic [1:0] grant,request;
+    logic       rst;
+    //
+    modport TEST(   output  request,rst,
+                    input   grant,clk);
+    
+    modport DUT(    input   request,rst,clk
+                    output  grant);
+endinterface
+```
+
+```verilog
+// 在信号列表用interface的顶层来创建声明
+module  test(arb_if.TEST arbif);
+    always @(posedge arbif.request)begin
+    // 做些什么
+    end
+endmodule
+```
+
+### 3.3 时钟块
+
+接口的时钟块里的任何信号都会被同步地驱动或采样。
+
+时钟块在看书的时候总是很迷惑，感觉书上讲的很不清晰，这里花较多篇幅详细介绍一下。
+
+时钟块里的信号，DUT输出到testbench的输入有一个延时，从testbench的输出到DUT的输入没有延时，总结下来就是如下代码。
+
+```verilog
+    default input #1 step output #0;
+```
+
+input skew和output skew，用来控制时序。input skew表示在时钟有效边沿采样信号的偏斜单位时间，output skew表示在时钟有效边沿驱动信号的偏斜单位时间，下图中定义的input skew就是相对于时钟沿多少单位时间采样，output skews是向后延多少单位时间输出。
+
+```verilog
+    clocking xxx @(clk)
+        input   #1ps    in1;
+        output  #6ps    out1;
+    endclocking
+```
+
+![alt text](image-28.png)
+
+时钟块的默认时序是在#1step，采样输入信号，在#0延时后，驱动输出信号。1step是一个时间点，代表前一个时间片的postponed区域。
+![alt text](image-27.png)
+
+### 3.4 程序program块
+
+program块不可以被其余program或者module例化，但是program内不能例化module。
+
+```verilog
+// 接口
+interface bus_if(input bit clk);
+    logic [3:0] data;
+endinterface
+
+// 设计
+module dut(input clk, input [3:0] data);
+    always @(posedge clk) begin
+        $display("DUT: data = %0d", data);
+    end
+endmodule
+
+// 测试program
+program test(bus_if ifc);
+    initial begin
+        for (int i = 0; i < 5; i++) begin
+            @(posedge ifc.clk);
+            ifc.data <= i;
+        end
+        #100 $finish();
+    end
+endprogram
+
+// 顶层模块
+module top;
+    bit clk;
+    initial begin
+        clk = 0;
+        forever #10 clk = ~clk;
+    end
+    
+    bus_if ifc(clk);
+    dut u_dut(.clk(ifc.clk), .data(ifc.data));
+    test u_test(ifc);
+endmodule
+```
+
+### 3.5 仿真的结束
+
+在systemverilog中，所有程序块的initial块中最后一个语句执行完毕后，编译器就认为这是测试的结尾，会停止程序，也可以通过调用\$exit或者\$finish结束测试。
+
