@@ -888,3 +888,220 @@ endmodule
 
 在systemverilog中，所有程序块的initial块中最后一个语句执行完毕后，编译器就认为这是测试的结尾，会停止程序，也可以通过调用\$exit或者\$finish结束测试。
 
+## 4 面向对象编程基础
+
+### 4.1 类
+
+在system verilog中，可以把类定义在program、module、package中，或者在这些块之外的任何地方。
+
+一个简单的类如下,使用%h获取了地址信息，使用%p，获取这个实例的内容。
+
+```verilog
+// 简单的学生类
+class Student;
+    // 类成员
+    string name;
+    int id;
+    
+    // 构造函数
+    function new(string n, int i);
+        name = n;
+        id = i;
+    endfunction
+    
+    // 显示信息方法
+    function void display();
+        $display("Student: %s, ID: %0d", name, id);
+    endfunction
+endclass
+
+// 测试模块
+module simple_test;
+    Student s1;
+    Student s2;
+    
+    initial begin
+        // 创建对象
+        $display("before new    :s1 addr   =   %h",s1);
+        $display("before new    :s2 addr   =   %h",s2);
+        s1 = new("Tom", 1001);
+        s2 = new("Tom", 1001);
+        
+        // 调用方法
+        s1.display();
+        $display("after new    :s1 addr   =   %h",s1);
+        $display("after new    :s2 addr   =   %h",s2);
+        s1 = new("Tom", 1001);
+        $display("s1 =   %0p",s1);
+        $display("s1 =   %m",s1);
+    end
+endmodule
+```
+
+执行结果如下。
+
+![alt text](image-29.png)
+
+### 4.2 new()和new[]的区别
+
+|特性|new()|new[]|
+|--|--|--|
+|用途|创建类对象实例|创建动态数组|
+|返回值|类句柄|数组|
+|内存管理|需要手动删除|自动管理|
+|调用方式|调用类的构造函数|分配数组空间|
+
+### 4.3 对象和对象的句柄
+
+下面是对象和对象句柄之间不同，通过声明一个句柄，随后通过new()函数创建一个对象。
+
+句柄通过赋值，可以指向一个新的对象。
+
+|特性|对象句柄|对象|
+|-|-|-|
+|本质|引用/指针|实际数据|
+|内存|固定大小|动态分配|
+|赋值|复制引用|复制数据|
+|比较|比较地址|比较内容|
+|默认值|null|类成员默认值|
+
+在system verilog中，如果指向对象的句柄数量为0，那么这个对象的存储空间就会被自动释放。
+
+systemverilog不能回收一个被句柄引用的地址空间。如果你创建了一个链接表，就只能将所有的句柄都设置为null，才能释放所有对象的空降。一个对象包含有从一个线程派生出来的程序，只要线程仍在运行，这个对象空间就不会释放，同样的，任何被一个子线程所使用的对象，在该线程没有结束之前，不会被解除分配。
+
+一个对象派生出子线程，指向对象的实例被设置为null，空间暂时还没有被释放，直到线程执行完毕。
+
+```verilog
+class ParentTask;
+    int data = 100;
+    string name;
+    
+    function new(string task_name);
+        name = task_name;
+        $display("[%0t] %s object created", $time, name);
+    endfunction
+    
+    // 启动子线程
+    task run_child_thread();
+        fork
+            begin
+                $display("[%0t] %s: Child thread STARTED, data=%0d", $time, name, data);
+                // 长时间运行的任务
+                for (int i = 0; i < 5; i++) begin
+                    #10;
+                    data++;  // 访问父对象成员
+                    $display("[%0t] %s: Child thread running, data=%0d", $time, name, data);
+                end
+                $display("[%0t] %s: Child thread FINISHED", $time, name);
+            end
+        join_none
+    endtask
+    
+    // 析构函数
+    function void cleanup();
+        $display("[%0t] %s: Object CLEANUP called", $time, name);
+    endfunction
+endclass
+
+module test_parent_child;
+    ParentTask task_obj;
+    
+    initial begin
+        $display("=== 测试: 父对象包含子线程 ===");
+        
+        // 创建对象并启动子线程
+        task_obj = new("MainTask");
+        task_obj.run_child_thread();
+        
+        #15; // 让子线程运行一会儿
+        
+        // 删除父对象句柄
+        $display("[%0t] Deleting parent object handle", $time);
+        task_obj = null;
+        
+        #50; // 等待足够长时间
+        $display("[%0t] Test finished", $time);
+    end
+endmodule
+```
+
+运行结果如下，在对象里的子程序结束后，才停止执行。
+
+![alt text](image-30.png)
+
+一个被子线程使用的对象，线程没有结束，地址空间就不会被回收。
+
+```verilog
+class DataObject;
+    int value;
+    string id;
+    
+    function new(string obj_id, int init_val);
+        id = obj_id;
+        value = init_val;
+        $display("[%0t] DataObject '%s' created, value=%0d", $time, id, value);
+    endfunction
+    
+    function void cleanup();
+        $display("[%0t] DataObject '%s' CLEANUP", $time, id);
+    endfunction
+endclass
+
+class ThreadContainer;
+    string thread_name;
+    
+    function new(string name);
+        thread_name = name;
+    endfunction
+    
+    // 线程使用外部对象
+    task run_with_external_obj(DataObject ext_obj);
+        fork
+            begin
+                $display("[%0t] %s: Thread STARTED using %s", $time, thread_name, ext_obj.id);
+                
+                for (int i = 0; i < 4; i++) begin
+                    #10;
+                    ext_obj.value += 5;  // 修改外部对象
+                    $display("[%0t] %s: Modified %s.value to %0d", 
+                            $time, thread_name, ext_obj.id, ext_obj.value);
+                end
+                
+                $display("[%0t] %s: Thread FINISHED", $time, thread_name);
+            end
+        join_none
+    endtask
+endclass
+
+module test_external_obj;
+    DataObject data_obj;
+    ThreadContainer container;
+    
+    initial begin
+        $display("=== 测试: 子线程使用外部对象 ===");
+        
+        // 创建数据对象和线程容器
+        data_obj = new("SharedData", 50);
+        container = new("WorkerThread");
+        
+        // 启动线程，传入外部对象
+        container.run_with_external_obj(data_obj);
+        
+        #15; // 让线程运行一会儿
+        
+        // 尝试删除数据对象句柄
+        $display("[%0t] Deleting data_obj handle", $time);
+        data_obj = null;
+        
+        #50; // 等待线程完成
+        $display("[%0t] Test finished", $time);
+    end
+endmodule
+```
+
+在15ns的时候，将指向实例的指针指向null，但是地址空间没有立马被释放。
+
+![alt text](image-31.png)
+
+### 4.4 静态变量和全局变量
+
