@@ -1105,3 +1105,494 @@ endmodule
 
 ### 4.4 静态变量和全局变量
 
+#### 4.4.1 静态变量和静态方法
+
+如果一个类的不同实例需要共享一个变量，使用静态变量要比使用全局变量要好。静态变量最好在声明的时候初始化。
+
+静态方法支持在第一个实例创建之前，来调用它，静态方法可以用来访问静态变量。
+
+类中定义的任务或者函数默认使用自动存储功能，所以不用使用automatic修饰符来修饰。
+
+```verilog
+class Transaction;
+    // 静态变量 - 被所有实例共享
+    static int transaction_count = 0;
+    static int total_amount = 0;
+    
+    int amount;
+    int id;
+    
+    function new(int amt);
+        amount = amt;
+        id = transaction_count++;
+        total_amount += amount;
+    endfunction
+    
+    // 静态方法
+    static function void print_stats();
+        $display("总交易数: %0d, 总金额: %0d", 
+                 transaction_count, total_amount);
+    endfunction
+endclass
+
+module test_class;
+    initial begin
+        Transaction tr1, tr2, tr3;
+        Transaction::print_stats(); // 在实例创建之前调用静态方法访问静态变量
+        tr1 = new(100);
+        tr2 = new(200);
+        tr3 = new(300);
+        
+        Transaction::print_stats(); // 通过类名访问静态方法
+    end
+endmodule
+```
+
+执行结果如下
+![alt text](image-33.png)
+
+#### 4.4.2 静态变量的访问方法
+
+一种是上面例子代码使用的instance.object的方法，另一种使用类作用域操作符，即Class::object，和上面代码使用静态方法的用法一样。
+
+#### 4.4.3 静态变量的初始化
+
+静态变量一般在声明的时候初始化，不能在构造函数new中初始化静态变量，因为每一个新的对象都会调用构造函数。
+
+#### 4.4.5 类外定义方法
+
+类外定义方法分为如下步骤：
+第一步，需要把方法声明到class内；
+第二步，使用extern 关键字修饰方法；
+第三部，在方法定义中，方法名前面加上类名和两个冒号(::作用域操作符) ；
+
+类方法的默认参数，类内声明和类外定义，默认参数都可以有，也可以没有，但必须要保证定义或声明中一个有，默认参数才会生效。
+
+```verilog
+class Student;
+    // 类属性（带默认值）
+    string name = "Unknown";
+    int age = 18;
+    int grade = 1;
+    
+    // 方法声明
+    extern function new(string name_val = "Anonymous", int age_val = 20);
+    //extern function new(string name_val, int age_val);
+    extern function void display_info();
+    extern function void promote();
+endclass
+
+
+// 构造函数
+//function Student::new(string name_val = "Anonymous", int age_val = 20);
+function Student::new(string name_val, int age_val);
+    this.name = name_val;
+    this.age = age_val;
+    this.grade = 1;  // 默认从1年级开始
+endfunction
+
+// 显示信息方法
+function void Student::display_info();
+    $display("Student: %s, Age: %0d, Grade: %0d", name, age, grade);
+endfunction
+
+// 升级方法
+function void Student::promote();
+    grade++;
+    $display("%s promoted to grade %0d", name, grade);
+endfunction
+
+
+module test;
+    Student s1, s2;
+    
+    initial begin
+        // 创建对象 - 使用不同参数
+        s1 = new("Alice");           // 使用部分默认值
+        s2 = new("Bob", 22);         // 使用自定义值
+        
+        // 调用方法
+        s1.display_info();
+        s2.display_info();
+        
+        // 升级测试
+        s1.promote();
+        s2.promote();
+        
+        s1.display_info();
+        s2.display_info();
+    end
+endmodule
+```
+
+#### 4.4.6 作用域
+
+作用域就是一个代码块，例如一个模块、程序、任务、函数、begin...end都是代码块，foreach和for也是一个代码块。
+
+system verilog允许在一个没有名字的begin-end块中声明一个变量，在verilog中是不可以的。
+
+名字可以相对于当前作用域，也可以相对于绝对作用域。绝对作用域是从$root或者$unit开始的。对于一个相对的名字，system verilog会查找作用域内的名字清单，直到找到匹配的名字。
+
+如果你想在很深层次明确引用类一级的对象，可以使用this指针，来避免这种不确定性。
+
+```verilog
+
+// 在模块外部声明的变量 - 属于$unit作用域
+int global_id = 9999;
+
+class Employee;
+    int global_id = 1001;
+    string name;
+    static int employee_count = 0;
+    
+    function new(string name, int global_id);
+        this.name = name;
+        this.global_id = global_id;           // 类属性
+        employee_count++;
+        
+        $display("Local global_id = %0d", global_id);           // 参数值
+        $display("Class global_id = %0d", this.global_id);      // 类属性值
+        $display("Unit global_id = %0d", $unit::global_id);     // 使用$unit访问
+    endfunction
+    
+    static function int get_count();
+        return employee_count;
+    endfunction
+endclass
+
+module company;
+    initial begin
+        Employee emp1, emp2;
+        emp1 = new("Alice", 2001);
+        emp2 = new("Bob", 2002);
+        
+        $display("Total employees: %0d", Employee::get_count());
+        $display("Unit global_id: %0d", $unit::global_id);  // 使用$unit
+    end
+endmodule
+```
+
+#### 4.4.7 在一个类中使用另一个类
+
+有时候，你需要编译一个类，而这个类包含一个尚未定义的类。声明这个被包含的类的句柄会引起错误，因为编译器还不认识这个新的数据类型，可以typedef语句声明一个类名。
+
+```verilog
+    // typedef 提前声明
+    typedef class A;
+
+    class B;
+        A   a;
+    endclass
+
+    class A;
+    endclass
+```
+
+#### 4.4.8 动态对象
+
+将对象传递给方法，传递的是对象的句柄，而非对象本身。
+
+![alt text](image-35.png)
+
+如上图，任务generator调用了transmit。两个句柄generator.t和transmit里的t都指向同一个对象。
+
+当调用一个带有标量变量（不是数组也不是对象）的方法且使用了ref关键字，system verilog 传递的标量的地址，所以这个方法可以修改这个标量的值。如果不使用ref关键字，system verilog将该标量的值复制到参数变量中，对该参数变量的任何改变不会影响原变量的值。
+
+以上是指的标量，不是句柄。如果传递的参数是句柄，可以通过句柄，在方法里改变句柄指向地址空间的值。
+
+如果不想让方法修改句柄指向地址空间的数据，可以传递这个句柄指向地址空间的一个拷贝。
+
+#### 4.4.9 在任务中修改句柄或者对象
+
+在任务和函数中生成或修改句柄，需要始终ref声明参数。你可以理解成传参传入的句柄，传入参数没有ref时，传入的是参数的复制，有ref时，传入的是参数本身地址。
+
+```verilog
+class Transaction;
+    int data;
+endclass
+
+
+function void modify_handle_value(Transaction tr);
+    tr = new();  // 这不会影响外部句柄
+    tr.data = 100;
+endfunction
+
+// 调用
+Transaction my_tr;
+modify_handle_value(my_tr);  // my_tr 仍然为 null
+
+
+function void modify_handle_ref(ref Transaction tr);
+    tr = new();  // 这会修改外部句柄
+    tr.data = 200;
+endfunction
+
+// 调用
+Transaction my_tr;
+modify_handle_ref(my_tr);  // my_tr 指向新对象
+```
+
+在任务中修改对象，最好是将每次循环都new一个新的对象，这样就避免了每个transmit使用的参数都是同一个地址。
+
+```verilog
+class Transaction;
+    int addr;
+    int data;
+    time timestamp;
+    
+    function void display();
+        $display("Time=%0t: Transaction addr=%h", $time, addr);
+    endfunction
+endclass
+
+module test;
+    task transmit(Transaction tr);
+        #10;  // 模拟传输延迟
+        $display("Time=%0t: Transmitted addr=%h", $time, tr.addr);
+    endtask
+    
+    task generator_bad(int n);
+        Transaction t = new();  // 这里最好是挪到repeat循环内，每次都重新new方法创建一个新对象
+        repeat(n) begin
+            t.addr = $random();
+            $display("Time=%0t: Generated  addr=%h", $time, t.addr);
+            transmit(t);
+        end
+    endtask
+    
+    initial begin
+        generator_bad(3);
+    end
+endmodule
+```
+
+#### 4.4.10 句柄数组
+
+在写测试平台时，可以使用句柄数组来保存和引用许多对象。句柄数组是由句柄构成的，不是由对象构成的，所以需要在使用它们之前，为每一个句柄创建对象。这些句柄可能指向同一个对象，也可能没有指向对象。
+
+```verilog
+    // 创建一个句柄数组
+    Transaction trans[10];
+```
+
+### 4.5 对象的复制
+
+最简单的对象复制方法是使用new函数，它复制了现有对象的所有变量，并且你已经定义的new函数不会被调用，这仅仅满足简单类成员的复制，如果类里有另一个类的句柄，那么new函数复制的时候只会复制句柄，导致复制后的类指向同一个地址空间。
+
+```verilog
+class Transaction;
+    int addr;
+    int data;
+    
+    function new();
+        // 默认构造函数
+    endfunction
+    
+    function void display();
+        $display("addr=%h, data=%h", addr, data);
+    endfunction
+endclass
+
+module  test;
+    initial begin
+        // 使用 new 复制对象
+        Transaction original,copy1;
+        original    = new();
+
+        original.addr = 16'h1234;
+        original.data = 32'h5678;
+        
+        copy1 = new original;  // 复制对象
+        copy1.addr = 16'hABCD;  // 修改副本，不影响原对象
+        
+        original.display();  // addr=1234, data=5678
+        copy1.display();     // addr=abcd, data=5678
+    end
+endmodule
+```
+
+使用new函数复制，成员句柄指向同一个地址空间，如果某一个对象修改了这个句柄所指向地址空间的内容，另一个成员也会感知到。
+
+![alt text](image-36.png)
+
+![alt text](image-37.png)
+
+使用流操作符从数组到打包对象，或者从打包对象到数组。
+
+## 5 随机化
+
+### 5.1 system veilog中的随机化
+
+类有一个randomize方法，调用可以将类里用rand和randc修饰的成员随机化。对于没有使用rand和randc修饰的成员，不做随机。
+
+rand修饰的随机数就是普通的随机数，出现过的数值在下次还有可能出现。
+
+randc修饰的随机数，所有有可能的数值都出现过后，才会启动新一轮的数值随机。
+
+约束使用关键字constraint，后跟约束的名字，并且使用{...}包含，{...}包含的是一系列关系表达式，表达式永远为真。此外，放在{...}内，而不是begin...end块内，是因为约束代码是声明性质的。
+
+.randomize函数的返回值为0，代表约束失败。
+
+```verilog
+class SimpleRand;
+    // 非随机变量
+    int id;
+    
+    // rand 变量 - 普通随机
+    rand bit [3:0] data;      // 0-15 随机值，可重复
+    
+    // randc 变量 - 循环随机  
+    randc bit [2:0] address;  // 0-7 循环不重复
+    
+    // 约束条件
+    constraint basic {
+        data inside {[0:15]};
+        address inside {[0:7]};
+    }
+    
+    // 显示函数
+    function void display();
+        $display("ID=%0d, data=%0d, address=%0d", id, data, address);
+    endfunction
+endclass
+
+module simple_test;
+    SimpleRand obj;
+    
+    initial begin
+        obj = new();
+        obj.id = 1;
+        
+        $display("=== rand 测试 (data 可重复,addr 不可重复) 
+        repeat(15) begin
+            assert(obj.randomize());
+            obj.display();
+        end
+    end
+endmodule
+```
+
+![alt text](image-39.png)
+
+约束表达式的求解是由system verilog的约束求解器完成的。求解器能够选择满足约束的值，这个值是由system verilog的PRNG从一个初始值（seed）产生。如果system verilog的仿真器每次使用相同的初始值，相同的测试平台，那么仿真的结果也是相同的。
+
+system verilog可以随机化整形变量，即由位组成的变量。尽管只能随机化2值数据类型，但位可以是2值或者4值类型，不能随机字符串，或者约束里指向句柄，或者实数类型。
+
+### 5.2 约束
+
+有用的激励--各个变量之间有相互关系。这种相互关系需要用包含一个或多个约束表达式的约束块定义这些相互关系，system verilog会选择满足所有表达式的随机值。
+
+每个表达式里，至少有一个变量必须是rand或者randc类型的随机变量。
+
+例如，添加对上面成员变量id的约束，id本身是不带rand或者randc修饰符的，执行代码就会检查到id不满足约束。
+
+```verilog
+class SimpleRand;
+    // 非随机变量
+    int id;
+    ...
+    // 新增约束
+    constraint id_c {
+        id  < 1;
+    }
+    ...
+endclass
+
+module simple_test;
+    SimpleRand obj;
+    
+    initial begin
+        obj = new();
+        obj.id = 1;
+        
+        $display("=== rand 测试 (data 可重复,addr 不可重复) ===");
+        repeat(15) begin
+            assert(obj.randomize());
+            obj.display();
+        end
+    end
+endmodule
+```
+
+![alt text](image-38.png)
+
+#### 5.2.1 简单表达式
+
+在约束总，一个表达式最多只能使用一个关系操作符（<、<=、==、>=、>），例如下面的约束。
+
+```verilog
+    constraint bad{lo  <    med <   hi;}
+```
+
+以上约束表达式会分割成两个关系表达式(lo    <   med) < hi，与实际的约束意图不符。
+
+#### 5.2.2 等效表达式
+
+例如如下等效关系。
+
+```verilog
+    constraint  equal{
+        header.addr_mode    *   4   + payload.size()    ==  len;
+    }
+```
+
+#### 5.2.3 权重分布
+
+dist操作符允许产生权重分布，这样某些值的选取机会会要比其他值大一些。dist操作符带有一个值的列表以及相应的权重，中间用:=或者:/分开。权重可以是常数或者变量。值可以是一个值或者值的范围，也可以是变量，例如[lo:hi]。权重不用百分比表示，权重的和也不必是100。:=操作符表示值范围内的每一个值的权重是一样的，:/操作符表示权重要均匀分到值范围内的每一个值。
+
+```verilog
+class SimpleVariableWeight;
+    rand int value;
+
+    int unsigned    low1    =   0;
+    int unsigned    low2    =   100;
+    int unsigned    hig1    =   2;
+    int unsigned    hig2    =   101;
+
+    
+    // 权重变量
+    int weight_single = 10;    // 用于 :=
+    int weight_range  = 30;    // 用于 :/
+    
+    constraint dist_const {
+        value dist {
+            //[0:2]      := weight_single,  // 单个值权重
+            //[100:101]  :/ weight_range    // 范围权重均匀分配
+            [low1:hig1]      := weight_single,  // 单个值权重
+            [low2:hig2]  :/ weight_range    // 范围权重均匀分配
+        };
+    }
+    
+    function void display();
+        $display("Value = %0d (single_weight=%0d, range_weight=%0d)", 
+                 value, weight_single, weight_range);
+    endfunction
+endclass
+
+module test_variable_weight;
+    SimpleVariableWeight obj;
+    
+    initial begin
+        obj = new();
+        
+        $display("=== 测试1: 默认权重 ===");
+        repeat(8) begin
+            assert(obj.randomize());
+            obj.display();
+        end
+        
+        $display("\n=== 测试2: 调整权重 ===");
+        obj.weight_single = 40;  // 增加单个值权重
+        obj.weight_range  = 20;  // 减少范围权重
+        
+        repeat(8) begin
+            assert(obj.randomize());
+            obj.display();
+        end
+    end
+endmodule
+```
+
+执行结果如下
+
+![alt text](image-40.png)
